@@ -1,0 +1,28 @@
+---
+# Copy pki to local host
+- name: Configure ras
+  hosts: ras_server
+  become: true
+  vars_files:
+  - defaults/main.yml
+  tasks:
+  - name: Copy ca.crt
+    ansible.builtin.fetch:
+      src: /etc/openvpn/pki/ca.crt
+      dest: /etc/openvpn/
+      flat: yes 
+      
+  - name: Copy client.crt
+    ansible.builtin.fetch:
+      src: /etc/openvpn/pki/issued/client.crt
+      dest: /etc/openvpn/
+      flat: yes 
+      
+  - name: Copy client.key
+    ansible.builtin.fetch:
+      src: /etc/openvpn/pki/private/client.key
+      dest: /etc/openvpn/
+      flat: yes
+               
+ 
+     

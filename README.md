@@ -390,4 +390,287 @@ iperf Done.
 Режим TAP работает на 2-ом уровне сетевой модели, подходит для проброса vlan и позволяет использовать link-state протоколы динамической маршрутизации.\
 Режим TUN работает на 3-ем уровне и не позволяет использовать link-state протоколы динамической маршрутизации.
 
+## 2. Поднять RAS на базе OpenVPN с клиентскими сертификатами, подключиться с локальной машины на виртуалку.
+
+### Решение.
+
+Для решения задачи добавим в Vagrantfile ещё одну виртуалку ras. \
+Для "наливки" и настройки будем использвать отдельный плейбук ras.yml. \
+Этот плейбук выполняет установку openvpn и easy-rsa. \
+Также копирует и запускает модуль systemd для openvpn из предыдущей задачи.\
+Далее нам необходимо зайти на ras и выполнить инициализацию pki.
+```
+
+vagrant@ras:/etc/openvpn$ sudo -i
+
+root@ras:/etc/openvpn# /usr/share/easy-rsa/easyrsa init-pki
+
+init-pki complete; you may now create a CA or requests.
+Your newly created PKI dir is: /etc/openvpn/pki
+```
+
+Далее сгенерируем необходимые ключи и сертификаты для сервера.
+```
+
+root@ras:/etc/openvpn# echo 'rasvpn' | /usr/share/easy-rsa/easyrsa build-ca nopass
+
+Using SSL: openssl OpenSSL 1.1.1f  31 Mar 2020
+Generating RSA private key, 2048 bit long modulus (2 primes)
+........+++++
+...........+++++
+e is 65537 (0x010001)
+Can't load /etc/openvpn/pki/.rnd into RNG
+140191930611008:error:2406F079:random number generator:RAND_load_file:Cannot open file:../crypto/rand/randfile.c:98:Filename=/etc/openvpn/pki/.rnd
+You are about to be asked to enter information that will be incorporated
+into your certificate request.
+What you are about to enter is what is called a Distinguished Name or a DN.
+There are quite a few fields but you can leave some blank
+For some fields there will be a default value,
+If you enter '.', the field will be left blank.
+-----
+Common Name (eg: your user, host, or server name) [Easy-RSA CA]:
+CA creation complete and you may now import and sign cert requests.
+Your new CA certificate file for publishing is at:
+/etc/openvpn/pki/ca.crt
+
+root@ras:/etc/openvpn# echo 'rasvpn' | /usr/share/easy-rsa/easyrsa gen-req server nopass
+
+Using SSL: openssl OpenSSL 1.1.1f  31 Mar 2020
+Generating a RSA private key
+..................+++++
+.........................+++++
+writing new private key to '/etc/openvpn/pki/private/server.key.e5bzBNiB7i'
+-----
+You are about to be asked to enter information that will be incorporated
+into your certificate request.
+What you are about to enter is what is called a Distinguished Name or a DN.
+There are quite a few fields but you can leave some blank
+For some fields there will be a default value,
+If you enter '.', the field will be left blank.
+-----
+Common Name (eg: your user, host, or server name) [server]:
+Keypair and certificate request completed. Your files are:
+req: /etc/openvpn/pki/reqs/server.req
+key: /etc/openvpn/pki/private/server.key
+
+root@ras:/etc/openvpn# echo 'yes' | /usr/share/easy-rsa/easyrsa sign-req server server
+
+Using SSL: openssl OpenSSL 1.1.1f  31 Mar 2020
+
+
+You are about to sign the following certificate.
+Please check over the details shown below for accuracy. Note that this request
+has not been cryptographically verified. Please be sure it came from a trusted
+source or that you have verified the request checksum with the sender.
+
+Request subject, to be signed as a server certificate for 1080 days:
+
+subject=
+    commonName                = rasvpn
+
+
+Type the word 'yes' to continue, or any other input to abort.
+  Confirm request details: Using configuration from /etc/openvpn/pki/safessl-easyrsa.cnf
+Check that the request matches the signature
+Signature ok
+The Subject's Distinguished Name is as follows
+commonName            :ASN.1 12:'rasvpn'
+Certificate is to be certified until Feb 19 13:48:44 2027 GMT (1080 days)
+
+Write out database with 1 new entries
+Data Base Updated
+
+Certificate created at: /etc/openvpn/pki/issued/server.crt
+
+root@ras:/etc/openvpn# /usr/share/easy-rsa/easyrsa gen-dh
+
+Using SSL: openssl OpenSSL 1.1.1f  31 Mar 2020
+Generating DH parameters, 2048 bit long safe prime, generator 2
+This is going to take a long time
+.......................................................................................................+......................................................................+..............................................................................................................................+.............................................................................................................+............................+.......+.......................................+...................................................................................................+.......................................+.........................................................+.....................+........................................................................................................................................................................+..................................................................................+.................................................................................................................+................................................+......................+......................................+................................................................................................................................+........................................+..............+...............................................................................................................+...................................................+.............................................................................+......+................................................................+.................................................................+...........................+..............................................+...............+.....................................................................................+...............................................................................................................................................................................................................................................................+..............................................................................................+......+..................................................................................................................................+...............................................................+..........................................................................................................................................+...........................................................................................+..................................................+.........................+.............................+............................................................................................+................................................................................................................................................................................................................+..........................................................................................................................................................................................+..............................................................+..............................................................................................................+......................+....................................+.................................................+................................................................................................................................+................................................................................................................+................................................+......................................+.......................+.....+.+......................................................................................+.............................................................................................................................................................................................+........................+...............+..............................................+...................................................................................................................................................+..........................................................................+.....................................................................................................................................................................................................+............+.....................................................................................................................................................................+..............+....................................................................+.................................................................................+......+......................................................................................+......................................................................................................................+.........................................................................................................................................................................................+...+............+.........+...............................................................................................+..........................................................................................................................................................................................................+...................................................+....................+...................................................................................................................................+....................................................................................................................................................+..................................................................................................+.............................+..................+..........................................................+...+........................................................................+.+....................................................................................................................................................................................................................+.........................+...........................................................................................................................................................................................................+..................................................................+.....+....+..................+..............................................................................................................................................+................................................................................................................+.............................................................................................+......................................................................................................+.....................+...............................................+.........................+.....................................+.....................................+..................................+...+..........................+.................................................+.........+...............................................................................+..+.......+.............................................................+...........................................................................................................................................+...............................................................+....................................................................................................+....................................................+...................................................................................................................................+............................................................................................+............................................................................................................................................................................................+...........+...............................................................................................++*++*++*++*
+
+DH parameters of size 2048 created at /etc/openvpn/pki/dh.pem
+
+root@ras:/etc/openvpn# openvpn --genkey --secret ca.key
+```
+
+Далее генерируем сертификаты для клиента.
+```
+
+root@ras:/etc/openvpn# echo 'client' | /usr/share/easy-rsa/easyrsa gen-req client nopass
+
+Using SSL: openssl OpenSSL 1.1.1f  31 Mar 2020
+Generating a RSA private key
+.....................+++++
+............................................+++++
+writing new private key to '/etc/openvpn/pki/private/client.key.utatAkXduL'
+-----
+You are about to be asked to enter information that will be incorporated
+into your certificate request.
+What you are about to enter is what is called a Distinguished Name or a DN.
+There are quite a few fields but you can leave some blank
+For some fields there will be a default value,
+If you enter '.', the field will be left blank.
+-----
+Common Name (eg: your user, host, or server name) [client]:
+Keypair and certificate request completed. Your files are:
+req: /etc/openvpn/pki/reqs/client.req
+key: /etc/openvpn/pki/private/client.key
+
+root@ras:/etc/openvpn# echo 'yes' | /usr/share/easy-rsa/easyrsa sign-req client client
+
+Using SSL: openssl OpenSSL 1.1.1f  31 Mar 2020
+
+
+You are about to sign the following certificate.
+Please check over the details shown below for accuracy. Note that this request
+has not been cryptographically verified. Please be sure it came from a trusted
+source or that you have verified the request checksum with the sender.
+
+Request subject, to be signed as a client certificate for 1080 days:
+
+subject=
+    commonName                = client
+
+
+Type the word 'yes' to continue, or any other input to abort.
+  Confirm request details: Using configuration from /etc/openvpn/pki/safessl-easyrsa.cnf
+Check that the request matches the signature
+Signature ok
+The Subject's Distinguished Name is as follows
+commonName            :ASN.1 12:'client'
+Certificate is to be certified until Feb 19 13:50:53 2027 GMT (1080 days)
+
+Write out database with 1 new entries
+Data Base Updated
+
+Certificate created at: /etc/openvpn/pki/issued/client.crt
+```
+
+Создадим конфигурационный файл /etc/openvpn/server.conf
+```
+
+root@ras:/etc/openvpn# nano server.conf
+root@ras:/etc/openvpn# cat server.conf 
+port 1207
+proto udp
+dev tun
+ca /etc/openvpn/pki/ca.crt
+cert /etc/openvpn/pki/issued/server.crt
+key /etc/openvpn/pki/private/server.key
+dh /etc/openvpn/pki/dh.pem
+server 10.10.10.0 255.255.255.0
+ifconfig-pool-persist ipp.txt
+client-to-client
+client-config-dir /etc/openvpn/client
+keepalive 10 120
+comp-lzo
+persist-key
+persist-tun
+status /var/log/openvpn-status.log
+log /var/log/openvpn.log
+verb 3
+```
+
+Далее нам необходимо скопировать сертификаты и ключи для клиента на хост машину. \
+Для этого был создан отдельный плейбук ras_copy_pki.yml.
+```
+
+chumaksa@debpc:~/otus/otus-task22$ sudo ansible-playbook ras_copy_pki.yml 
+
+PLAY [Configure ras] **********************************************************************************************************************************************************************************************
+
+TASK [Gathering Facts] ********************************************************************************************************************************************************************************************
+ok: [ras]
+
+TASK [Copy ca.crt] ************************************************************************************************************************************************************************************************
+changed: [ras]
+
+TASK [Copy client.crt] ********************************************************************************************************************************************************************************************
+changed: [ras]
+
+TASK [Copy client.key] ********************************************************************************************************************************************************************************************
+changed: [ras]
+
+PLAY RECAP ********************************************************************************************************************************************************************************************************
+ras                        : ok=4    changed=3    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0 
+```
+
+На хосте создаём конфигурационный файл client.conf.
+```
+
+chumaksa@debpc:~$ sudo nano /etc/openvpn/client.conf 
+[sudo] password for chumaksa: 
+chumaksa@debpc:~$ cat /etc/openvpn/client.conf
+dev tun
+proto udp
+remote 192.168.56.30 1207
+client
+resolv-retry infinite
+remote-cert-tls server
+ca ./ca.crt
+cert ./client.crt
+key ./client.key
+route 10.10.10.0 255.255.255.0
+persist-key
+persist-tun
+comp-lzo
+verb 3
+```
+
+Далее подключаемся к openvpn серверу ras и проверяем его доступность.
+```
+
+chumaksa@debpc:/etc/openvpn$ sudo openvpn --config client.conf
+2024-03-06 18:11:27 WARNING: Compression for receiving enabled. Compression has been used in the past to break encryption. Sent packets are not compressed unless "allow-compression yes" is also set.
+2024-03-06 18:11:27 Note: --cipher is not set. OpenVPN versions before 2.5 defaulted to BF-CBC as fallback when cipher negotiation failed in this case. If you need this fallback please add '--data-ciphers-fallback BF-CBC' to your configuration and/or add BF-CBC to --data-ciphers.
+2024-03-06 18:11:27 Note: '--allow-compression' is not set to 'no', disabling data channel offload.
+2024-03-06 18:11:27 WARNING: file './client.key' is group or others accessible
+2024-03-06 18:11:27 OpenVPN 2.6.3 x86_64-pc-linux-gnu [SSL (OpenSSL)] [LZO] [LZ4] [EPOLL] [PKCS11] [MH/PKTINFO] [AEAD] [DCO]
+2024-03-06 18:11:27 library versions: OpenSSL 3.0.11 19 Sep 2023, LZO 2.10
+2024-03-06 18:11:27 DCO version: N/A
+2024-03-06 18:11:27 TCP/UDP: Preserving recently used remote address: [AF_INET]192.168.56.30:1207
+2024-03-06 18:11:27 Socket Buffers: R=[212992->212992] S=[212992->212992]
+2024-03-06 18:11:27 UDPv4 link local: (not bound)
+2024-03-06 18:11:27 UDPv4 link remote: [AF_INET]192.168.56.30:1207
+2024-03-06 18:11:27 TLS: Initial packet from [AF_INET]192.168.56.30:1207, sid=f4416592 42fdba90
+2024-03-06 18:11:27 VERIFY OK: depth=1, CN=rasvpn
+2024-03-06 18:11:27 VERIFY KU OK
+2024-03-06 18:11:27 Validating certificate extended key usage
+2024-03-06 18:11:27 ++ Certificate has EKU (str) TLS Web Server Authentication, expects TLS Web Server Authentication
+2024-03-06 18:11:27 VERIFY EKU OK
+2024-03-06 18:11:27 VERIFY OK: depth=0, CN=rasvpn
+2024-03-06 18:11:27 Control Channel: TLSv1.3, cipher TLSv1.3 TLS_AES_256_GCM_SHA384, peer certificate: 2048 bit RSA, signature: RSA-SHA256
+2024-03-06 18:11:27 [rasvpn] Peer Connection Initiated with [AF_INET]192.168.56.30:1207
+2024-03-06 18:11:27 TLS: move_session: dest=TM_ACTIVE src=TM_INITIAL reinit_src=1
+2024-03-06 18:11:27 TLS: tls_multi_process: initial untrusted session promoted to trusted
+2024-03-06 18:11:28 SENT CONTROL [rasvpn]: 'PUSH_REQUEST' (status=1)
+2024-03-06 18:11:28 PUSH: Received control message: 'PUSH_REPLY,topology net30,ping 10,ping-restart 120,ifconfig 10.10.10.6 10.10.10.5,peer-id 1,cipher AES-256-GCM'
+2024-03-06 18:11:28 OPTIONS IMPORT: --ifconfig/up options modified
+2024-03-06 18:11:28 net_route_v4_best_gw query: dst 0.0.0.0
+2024-03-06 18:11:28 net_route_v4_best_gw result: via 192.168.248.166 dev wlx18d6c717ce87
+2024-03-06 18:11:28 ROUTE_GATEWAY 192.168.248.166/255.255.255.0 IFACE=wlx18d6c717ce87 HWADDR=18:d6:c7:17:ce:87
+2024-03-06 18:11:28 TUN/TAP device tun0 opened
+2024-03-06 18:11:28 net_iface_mtu_set: mtu 1500 for tun0
+2024-03-06 18:11:28 net_iface_up: set tun0 up
+2024-03-06 18:11:28 net_addr_ptp_v4_add: 10.10.10.6 peer 10.10.10.5 dev tun0
+2024-03-06 18:11:28 net_route_v4_add: 10.10.10.0/24 via 10.10.10.5 dev [NULL] table 0 metric -1
+2024-03-06 18:11:28 Initialization Sequence Completed
+2024-03-06 18:11:28 Data Channel: cipher 'AES-256-GCM', peer-id: 1, compression: 'lzo'
+2024-03-06 18:11:28 Timers: ping 10, ping-restart 120
+
+chumaksa@debpc:~$ ping -c 4 10.10.10.1
+PING 10.10.10.1 (10.10.10.1) 56(84) bytes of data.
+64 bytes from 10.10.10.1: icmp_seq=1 ttl=64 time=1.18 ms
+64 bytes from 10.10.10.1: icmp_seq=2 ttl=64 time=1.17 ms
+64 bytes from 10.10.10.1: icmp_seq=3 ttl=64 time=1.16 ms
+64 bytes from 10.10.10.1: icmp_seq=4 ttl=64 time=1.19 ms
+
+--- 10.10.10.1 ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss, time 3004ms
+rtt min/avg/max/mdev = 1.155/1.171/1.186/0.011 ms
+```
+
+
+
 

@@ -1,0 +1,31 @@
+---
+# Configure ras
+- name: Configure ras
+  hosts: ras_server
+  become: true
+  vars_files:
+  - defaults/main.yml
+  tasks:
+  - name: Install the openvpn
+    ansible.builtin.apt:
+      name: openvpn
+      update_cache: yes 
+
+  - name: Install the easy-rsa
+    ansible.builtin.apt:
+      name: easy-rsa
+      update_cache: yes
+
+  - name: Copy openvpn@.service systemd module
+    ansible.builtin.copy:
+      src: openvpn@.service
+      dest: /etc/systemd/system/openvpn@.service  
+      
+  - name: Make sure a service unit is running
+    ansible.builtin.systemd_service:
+      name: openvpn@server 
+      state: restarted
+      enabled: yes   
+               
+ 
+     

@@ -14,4 +14,9 @@ Vagrant.configure(2) do |config|
     client.vm.network "private_network", ip: "192.168.56.20"
   end
   
+  config.vm.define "ras" do |ras|
+    ras.vm.hostname = "ras.loc"
+    ras.vm.network "private_network", ip: "192.168.56.30"
+  end
+  
 end
