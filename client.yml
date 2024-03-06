@@ -3,6 +3,8 @@
 - name: Configure clients
   hosts: clients
   become: true
+  vars_files:
+  - defaults/main.yml  
   tasks: 
   - name: Copy file with owner and permissions
     ansible.builtin.copy:
@@ -10,4 +12,20 @@
       dest: /etc/openvpn/static.key
       owner: root
       group: root
-      mode: '0600'      
+      mode: '0600' 
+      
+  - name: Copy openvpn config file to client
+    ansible.builtin.template:
+      src: client/server.conf
+      dest: /etc/openvpn/server.conf  
+
+  - name: Copy openvpn@.service systemd module
+    ansible.builtin.copy:
+      src: openvpn@.service
+      dest: /etc/systemd/system/openvpn@.service  
+      
+  - name: Make sure a service unit is running
+    ansible.builtin.systemd_service:
+      name: openvpn@server 
+      state: restarted
+      enabled: yes   

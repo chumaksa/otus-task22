@@ -3,10 +3,12 @@
 - name: Configure servers
   hosts: servers
   become: true
+  vars_files:
+  - defaults/main.yml
   tasks:
   - name: Copy openvpn config file to server
-    ansible.builtin.copy:
-      src: server.conf
+    ansible.builtin.template:
+      src: server/server.conf
       dest: /etc/openvpn/server.conf
          
   - name: Create key
@@ -26,7 +28,7 @@
   - name: Make sure a service unit is running
     ansible.builtin.systemd_service:
       name: openvpn@server 
-      state: started
+      state: restarted
       enabled: yes
                
  
