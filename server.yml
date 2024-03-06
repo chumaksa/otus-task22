@@ -1,0 +1,33 @@
+---
+# Configure servers
+- name: Configure servers
+  hosts: servers
+  become: true
+  tasks:
+  - name: Copy openvpn config file to server
+    ansible.builtin.copy:
+      src: server.conf
+      dest: /etc/openvpn/server.conf
+         
+  - name: Create key
+    ansible.builtin.shell: openvpn --genkey --secret /etc/openvpn/static.key
+ 
+  - name: Specifying a destination path
+    ansible.builtin.fetch:
+      src: /etc/openvpn/static.key
+      dest: files/
+      flat: yes
+
+  - name: Copy openvpn@.service systemd module
+    ansible.builtin.copy:
+      src: openvpn@.service
+      dest: /etc/systemd/system/openvpn@.service  
+      
+  - name: Make sure a service unit is running
+    ansible.builtin.systemd_service:
+      name: openvpn@server 
+      state: started
+      enabled: yes
+               
+ 
+     

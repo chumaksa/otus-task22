@@ -1,0 +1,13 @@
+---
+# Configure clients
+- name: Configure clients
+  hosts: clients
+  become: true
+  tasks: 
+  - name: Copy file with owner and permissions
+    ansible.builtin.copy:
+      src: static.key
+      dest: /etc/openvpn/static.key
+      owner: root
+      group: root
+      mode: '0600'      
